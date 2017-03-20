@@ -1,0 +1,24 @@
+% Reference: http://erlang.org/doc/man/app.html
+{application, emq_plugin_elasticsearch,
+  [
+    % Ordering in this proplist is from reference doc.
+    % Please maintain the ordering when editing.
+    % Comma first gives much nicer diffs
+      {description, "Elasticsearch plugin for EMQ"}
+    , {vsn, "1.0.0"}
+    , {modules, []}
+    , {registered, [
+          emq_plugin_elasticsearch
+        , emq_plugin_elasticsearch_sup
+      ]}
+    , {applications, [
+          kernel
+        , stdlib
+        , esio
+        , uuid
+        , jsx % FIXME: Temp
+      ]}
+    , {env, []}
+    , {mod, {emq_plugin_elasticsearch_app, []}}
+  ]
+}.

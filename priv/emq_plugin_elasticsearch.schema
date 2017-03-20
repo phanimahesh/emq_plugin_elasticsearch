@@ -1,0 +1,321 @@
+%%-*- mode: erlang -*-
+%% vi: set ft=erlang:
+
+%% emq_plugin_elasticsearch schema configuration.
+%% This will be processsed by cuttlefish to generate .config
+
+
+%% @doc URL of the elasticsearch server to connect to
+{mapping, "elasticsearch.url", "emq_plugin_elasticsearch.es_url", [
+  {datatype, string}
+ ,{default, "http://localhost:9200/"}
+]}.
+
+%% @doc Fields/attributes to be included in logs sent to ES for 
+%% `client.connected` events. Must be a comma separated list of
+%% the following:
+%%  - clean_sess
+%%  - client_id
+%%  - connack
+%%  - connected_at
+%%  - keepalive
+%%  - peername
+%%  - proto_ver
+%%  - username
+%%  - will_topic
+%% The value `all` can be used as a shorthand for all of the above.
+%% event and timestamp are always included in addition to these.
+{mapping, "elasticsearch.log_fields.client.connected", "emq_plugin_elasticsearch.log_fields",[
+  {datatype, string}
+ ,{default, "username,client_id,connack,clean_sess,peername,will_topic"}
+]}.
+
+%% @doc Fields/attributes to be included in logs sent to ES for 
+%% `client.disconnected` events. Must be a comma separated list of
+%% the following:
+%%  - clean_sess
+%%  - client_id
+%%  - connected_at
+%%  - keepalive
+%%  - peername
+%%  - proto_ver
+%%  - reason
+%%  - username
+%%  - will_topic
+%% The value `all` can be used as a shorthand for all of the above.
+%% event and timestamp are always included in addition to these.
+{mapping, "elasticsearch.log_fields.client.disconnected", "emq_plugin_elasticsearch.log_fields",[
+  {datatype, string}
+ ,{default, "username,client_id,peername,reason"}
+]}.
+
+%% @doc Fields/attributes to be included in logs sent to ES for 
+%% `client.subscribe` events. Must be a comma separated list of
+%% the following:
+%%  - client_id
+%%  - topics
+%%  - username
+%% The value `all` can be used as a shorthand for all of the above.
+%% event and timestamp are always included in addition to these.
+{mapping, "elasticsearch.log_fields.client.subscribe", "emq_plugin_elasticsearch.log_fields",[
+  {datatype, string}
+ ,{default, "username,client_id,topics"}
+]}.
+
+%% @doc Fields/attributes to be included in logs sent to ES for 
+%% `client.unsubscribe` events. Must be a comma separated list of
+%% the following:
+%%  - client_id
+%%  - topics
+%%  - username
+%% The value `all` can be used as a shorthand for all of the above.
+%% event and timestamp are always included in addition to these.
+{mapping, "elasticsearch.log_fields.client.unsubscribe", "emq_plugin_elasticsearch.log_fields",[
+  {datatype, string}
+ ,{default, "username,client_id,topics"}
+]}.
+
+%% @doc Fields/attributes to be included in logs sent to ES for 
+%% `session.created` events. Must be a comma separated list of
+%% the following:
+%%  - client_id
+%%  - username
+%% The value `all` can be used as a shorthand for all of the above.
+%% event and timestamp are always included in addition to these.
+{mapping, "elasticsearch.log_fields.session.created", "emq_plugin_elasticsearch.log_fields",[
+  {datatype, string}
+ ,{default, "username,client_id"}
+]}.
+
+%% @doc Fields/attributes to be included in logs sent to ES for 
+%% `session.terminated` events. Must be a comma separated list of
+%% the following:
+%%  - client_id
+%%  - username
+%%  - reason
+%% The value `all` can be used as a shorthand for all of the above.
+%% event and timestamp are always included in addition to these.
+{mapping, "elasticsearch.log_fields.session.terminated", "emq_plugin_elasticsearch.log_fields",[
+  {datatype, string}
+ ,{default, "client_id,username,reason"}
+]}.
+
+%% @doc Fields/attributes to be included in logs sent to ES for 
+%% `session.subscribed` events. Must be a comma separated list of
+%% the following:
+%%  - client_id
+%%  - username
+%%  - topic
+%%  - options
+%% The value `all` can be used as a shorthand for all of the above.
+%% event and timestamp are always included in addition to these.
+{mapping, "elasticsearch.log_fields.session.subscribed", "emq_plugin_elasticsearch.log_fields",[
+  {datatype, string}
+ ,{default, "client_id,username,topic,options"}
+]}.
+
+%% @doc Fields/attributes to be included in logs sent to ES for 
+%% `session.unsubscribed` events. Must be a comma separated list of
+%% the following:
+%%  - client_id
+%%  - username
+%%  - topic
+%%  - options
+%% The value `all` can be used as a shorthand for all of the above.
+%% event and timestamp are always included in addition to these.
+{mapping, "elasticsearch.log_fields.session.unsubscribed", "emq_plugin_elasticsearch.log_fields",[
+  {datatype, string}
+ ,{default, "client_id,username,topic,options"}
+]}.
+
+%% @doc Fields/attributes to be included in logs sent to ES for 
+%% `message.publish` events. Must be a comma separated list of
+%% the following:
+%%  - dup
+%%  - from
+%%  - id
+%%  - payload
+%%  - pktid
+%%  - qos
+%%  - retain
+%%  - sys
+%%  - msg_timestamp
+%%  - topic
+%% The value `all` can be used as a shorthand for all of the above.
+%% Note that including payload will log contents of every message
+%% and can quickly overwhelm both broker and logging server under
+%% high load.
+%% event and timestamp are always included in addition to these.
+{mapping, "elasticsearch.log_fields.message.publish", "emq_plugin_elasticsearch.log_fields",[
+  {datatype, string}
+ ,{default, "id,from,topic,qos,retain,msg_timestamp"}
+]}.
+
+%% @doc Fields/attributes to be included in logs sent to ES for 
+%% `message.delivered` events. Must be a comma separated list of
+%% the following:
+%%  - client_id
+%%  - username
+%%  - dup
+%%  - from
+%%  - id
+%%  - payload
+%%  - pktid
+%%  - qos
+%%  - retain
+%%  - sys
+%%  - msg_timestamp
+%%  - topic
+%% The value `all` can be used as a shorthand for all of the above.
+%% Note that including payload will log contents of every message
+%% and can quickly overwhelm both broker and logging server under
+%% high load.
+%%
+%% client_id and username are of the recepient.
+%% Rest are from the message.
+%% event and timestamp are always included in addition to these.
+%% @see elasticsearch.log_fields.message.publish
+{mapping, "elasticsearch.log_fields.message.delivered", "emq_plugin_elasticsearch.log_fields",[
+  {datatype, string}
+ ,{default, "client_id,id"}
+]}.
+
+%% @doc Fields/attributes to be included in logs sent to ES for 
+%% `message.acked` events. Must be a comma separated list of
+%% the following:
+%%  - client_id
+%%  - username
+%%  - dup
+%%  - from
+%%  - id
+%%  - payload
+%%  - pktid
+%%  - qos
+%%  - retain
+%%  - sys
+%%  - msg_timestamp
+%%  - topic
+%% The value `all` can be used as a shorthand for all of the above.
+%% Note that including payload will log contents of every message
+%% and can quickly overwhelm both broker and logging server under
+%% high load.
+%%
+%% client_id and username are of the recepient.
+%% Rest are from the message.
+%% event and timestamp are always included in addition to these.
+%% @see elasticsearch.log_fields.message.publish
+{mapping, "elasticsearch.log_fields.message.acked", "emq_plugin_elasticsearch.log_fields",[
+  {datatype, string}
+ ,{default, "client_id,id"}
+]}.
+
+{translation, "emq_plugin_elasticsearch.log_fields",
+  fun(Conf) ->
+    LogFieldsConf = cuttlefish_variable:filter_by_prefix("elasticsearch.log_fields", Conf),
+    AllKeysMap = #{
+      'client.connected' => [
+                              clean_sess
+                             ,client_id
+                             ,connack
+                             ,connected_at
+                             ,keepalive
+                             ,peername
+                             ,proto_ver
+                             ,username
+                             ,will_topic
+                            ]
+      ,'client.disconnected' => [
+                                  clean_sess
+                                 ,client_id
+                                 ,connected_at
+                                 ,keepalive
+                                 ,peername
+                                 ,proto_ver
+                                 ,reason
+                                 ,username
+                                 ,will_topic
+                                ]
+     ,'client.subscribe' => [
+                              client_id
+                             ,topics
+                             ,username
+                            ]
+     ,'client.unsubscribe' => [
+                                client_id
+                               ,topics
+                               ,username
+                              ]
+     ,'session.created' => [
+                             client_id
+                            ,username
+                           ]
+     ,'session.terminated' => [
+                                client_id
+                               ,username
+                               ,reason
+                              ]
+     ,'session.subscribed' => [
+                                client_id
+                               ,username
+                               ,topic
+                               ,options
+                              ]
+     ,'session.unsubscribed' => [
+                                  client_id
+                                 ,username
+                                 ,topic
+                                 ,options
+                                ]
+     ,'message.publish' => [
+                             dup
+                            ,from
+                            ,id
+                            ,payload
+                            ,pktid
+                            ,qos
+                            ,retain
+                            ,sys
+                            ,msg_timestamp
+                            ,topic
+                           ]
+     ,'message.delivered' => [
+                               client_id
+                              ,username
+                              ,dup
+                              ,from
+                              ,id
+                              ,payload
+                              ,pktid
+                              ,qos
+                              ,retain
+                              ,sys
+                              ,msg_timestamp
+                              ,topic
+                             ]
+     ,'message.acked' => [
+                           client_id
+                          ,username
+                          ,dup
+                          ,from
+                          ,id
+                          ,payload
+                          ,pktid
+                          ,qos
+                          ,retain
+                          ,sys
+                          ,msg_timestamp
+                          ,topic
+                         ]
+     },
+    lists:foldl(
+      fun({["elasticsearch", "log_fields", A, B], "all"}, Acc) ->
+          Key = erlang:list_to_existing_atom(A ++ "." ++ B),
+          [{Key ,maps:get(Key, AllKeysMap)} | Acc];
+         ({["elasticsearch", "log_fields", A, B], Val}, Acc) ->
+          [{erlang:list_to_existing_atom(A ++ "." ++ B)
+           ,lists:map(fun(X) -> erlang:list_to_existing_atom(X) end,
+                    string:tokens(Val, ","))
+           } | Acc];
+         (_, Acc) -> Acc
+      end, [], LogFieldsConf)
+ end}.
