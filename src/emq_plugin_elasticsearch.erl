@@ -92,32 +92,23 @@ log_to_es(Document) ->
 
 %%%-------------------------------------------------------------------
 %% @private
-%% @doc Returns current Erlang System Time in milliseconds, with
-%%  microsecond precision.
+%% @doc Returns current Erlang System Time in milliseconds
 %%
 %%  This was chosen to match Web Events API, for no particular reason.
 %%  https://developer.mozilla.org/en-US/docs/Web/API/Event/timeStamp
-%%
-%%  For timestamping events, seconds are too coarse, and microseconds
-%%  are not commonly used. I fully expect sub millisecond durations
-%%  when measuring time taken during a particular phase. Overall,
-%%  a floating point number representing milliseconds with microsecond
-%%  precision seemed like a good choice.
 %% @end
 %%%-------------------------------------------------------------------
 timestamp() ->
-  erlang:system_time(micro_seconds)/1000.
+  erlang:system_time(milli_seconds).
 
 %%%-------------------------------------------------------------------
 %% @private
 %% @doc Converts given erlang:timestamp() into milliseconds since
-%%  epoch. Returns a float with microsecond precision.
-%%
-%%  Also see docs on timestamp/0.
+%%  epoch.
 %% @end
 %%%-------------------------------------------------------------------
 timestamp({MegaSecs, Secs, MicroSecs}) ->
-  (MegaSecs * 100000 + Secs)*1000 + (MicroSecs/1000).
+  (MegaSecs * 100000 + Secs)*1000 + (MicroSecs div 1000).
 
 %%%-------------------------------------------------------------------
 %% @private
