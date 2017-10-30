@@ -131,8 +131,8 @@ unpack_message(Message) ->
     } = Message,
   #{
      dup => Dup
-    ,from => From
-    ,id => Id
+    ,from => format_from(From)
+    ,id => base64:encode(Id)
     ,payload => Payload
     ,pktid => PktId
     ,qos => Qos
@@ -142,6 +142,21 @@ unpack_message(Message) ->
     ,topic => Topic
   }.
 
+
+%%% Format helpers
+%%  Some fields may not be in an acceptable format for jsx, used by esio.
+%%  Helpers to convert offending fields into acceptable formats.
+
+format_peername({Addr,Port})->
+  #{address => inet_parse:ntoa(Addr),port => Port}.
+
+format_from({ClientId, Username})->
+  #{client_id => ClientId, username => Username}.
+
+format_reason(Reason) when is_atom(Reason) -> Reason;
+format_reason(Reason) when is_binary(Reason) -> Reason;
+format_reason(Reason) ->
+  erlang:iolist_to_binary(io_lib:format("~P", [Reason, 20])).
 
 %%& Hooks
 %%  The names should be self explanatory.
@@ -164,9 +179,9 @@ on_client_connected(ConnAck, Client, Keys) ->
     ,clean_sess => CleanSession
     ,client_id => ClientId
     ,connack => ConnAck
-    ,connected_at => ConnectedAt
+    ,connected_at => timestamp(ConnectedAt)
     ,keepalive => Keepalive
-    ,peername => Peername
+    ,peername => format_peername(Peername)
     ,proto_ver => ProtoVer
     ,timestamp => timestamp()
     ,username => Username
@@ -192,11 +207,11 @@ on_client_disconnected(Reason, Client, Keys) ->
      event => <<"client_disconnected">>
     ,clean_sess => CleanSession
     ,client_id => ClientId
-    ,connected_at => ConnectedAt
+    ,connected_at => timestamp(ConnectedAt)
     ,keepalive => Keepalive
-    ,peername => Peername
+    ,peername => format_peername(Peername)
     ,proto_ver => ProtoVer
-    ,reason => Reason
+    ,reason => format_reason(Reason)
     ,timestamp => timestamp()
     ,username => Username
     ,will_topic => WillTopic
@@ -263,7 +278,7 @@ on_session_terminated(ClientId, Username, Reason, Keys) ->
   Log = #{
      event => <<"session_terminated">>
     ,client_id => ClientId
-    ,reason => Reason
+    ,reason => format_reason(Reason)
     ,timestamp => timestamp()
     ,username => Username
    },
