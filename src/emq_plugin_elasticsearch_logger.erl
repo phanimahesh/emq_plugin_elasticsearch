@@ -46,7 +46,7 @@ handle_info(Info, State) ->
 
 handle_cast({log, Doc}, {Sock, _Ref} = State) ->
   Id = uuid:to_string(uuid:uuid1()),
-  esio:put(Sock, "urn:es:mqtt:events:" ++ Id, Doc),
+  esio:put_(Sock, "urn:es:mqtt:events:" ++ Id, Doc),
   {noreply, State}.
 
 %%%-------------------------------------------------------------------
