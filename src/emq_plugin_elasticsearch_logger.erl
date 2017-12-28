@@ -40,6 +40,12 @@ handle_info({'DOWN', Ref, process, Pid, Reason}, {_Sock, Ref}) ->
   {ok, State} = create_bulk_socket(),
   {noreply, State};
 
+handle_info({'$pipe', _Pid, ok}, State) ->
+  % esio:put_ calls are causing one message each, probably.
+  % The pid is the same in all mesages. This message isn't useful unless
+  % we want to count how many have been acknowledged.
+  {noreply, State};
+
 handle_info(Info, State) ->
   io:format("Unhandled info: ~p~n", [Info]),
   {noreply, State}.
