@@ -32,7 +32,8 @@ init([]) ->
 terminate(_Reason, {Sock, Ref}) ->
   esio:close(Sock),
   erlang:demonitor(Ref, [flush]),
-  ok = emq_plugin_elasticsearch:unregister_hooks().
+  Env = application:get_all_env(),
+  ok = emq_plugin_elasticsearch:unregister_hooks(Env).
 
 % When the socket closes unexpectedly, re-establish connection.
 handle_info({'DOWN', Ref, process, Pid, Reason}, {_Sock, Ref}) ->

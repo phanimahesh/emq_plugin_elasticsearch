@@ -11,6 +11,26 @@
  ,{default, "http://localhost:9200/"}
 ]}.
 
+
+%% @doc Events to be logged to ES
+%% Must be a comma separated list of the following:
+%%  - client.connected
+%%  - client.disconnected
+%%  - client.subscribe
+%%  - client.unsubscribe
+%%  - session.created
+%%  - session.terminated
+%%  - session.subscribed
+%%  - session.unsubscribed
+%%  - message.publish
+%%  - message.delivered
+%%  - message.acked
+%% The value `all` can be used as a shorthand for all the above
+{mapping, "elasticsearch.enabled_events", "emq_plugin_elasticsearch.enabled_events", [
+  {datatype, string}
+ ,{default, "all"}
+]}.
+
 %% @doc Fields/attributes to be included in logs sent to ES for 
 %% `client.connected` events. Must be a comma separated list of
 %% the following:
@@ -208,6 +228,21 @@
   {datatype, string}
  ,{default, "client_id,id"}
 ]}.
+
+{translation, "emq_plugin_elasticsearch.enabled_events",
+  fun(Conf) ->
+      AllEvents = ['client.connected', 'client.disconnected',
+                   'client.subscribe', 'client.unsubscribe',
+                   'session.created', 'session.terminated',
+                   'session.subscribed', 'session.unsubscribed'
+                   'message.publish', 'message.delivered', 'message.acked'];
+     case cuttlefish:conf_get("elasticsearch.enabled_events", Conf) of
+       "all" -> AllEvents;
+       Events ->
+         lists:map(fun(X) -> erlang:list_to_existing_atom(X) end,
+                   string:tokens(Events, ","))
+     end
+  end}.
 
 {translation, "emq_plugin_elasticsearch.log_fields",
   fun(Conf) ->

@@ -7,7 +7,7 @@
 -include_lib("emqttd/include/emqttd.hrl").
 
 %% Functions to register/unregister hooks
--export([register_hooks/1, unregister_hooks/0]).
+-export([register_hooks/1, unregister_hooks/1]).
 
 %% EMQ hooks callbacks
 -export([on_client_connected/3, on_client_disconnected/3,
@@ -16,62 +16,46 @@
          on_session_subscribed/4, on_session_unsubscribed/4,
          on_message_publish/2, on_message_delivered/4, on_message_acked/4]).
 
+all_hooks() ->
+  #{
+  'client.connected' => fun ?MODULE:on_client_connected/3,
+  'client.disconnected' => fun ?MODULE:on_client_disconnected/3,
+  'client.subscribe' => fun ?MODULE:on_client_subscribe/4,
+  'client.unsubscribe' => fun ?MODULE:on_client_unsubscribe/4,
+  'session.created' => fun ?MODULE:on_session_created/3,
+  'session.terminated' => fun ?MODULE:on_session_terminated/4,
+  'session.subscribed' => fun ?MODULE:on_session_subscribed/4,
+  'session.unsubscribed' => fun ?MODULE:on_session_unsubscribed/4,
+  'message.publish' => fun ?MODULE:on_message_publish/2,
+  'message.delivered' => fun ?MODULE:on_message_delivered/4,
+  'message.acked' => fun ?MODULE:on_message_acked/4
+ }.
+
 %%%-------------------------------------------------------------------
 %% @doc Handles hook registrations when loading the plugin
 %% @end
 %%%-------------------------------------------------------------------
 register_hooks(Env) ->
-  ok = emqttd:hook('client.connected',
-                   fun ?MODULE:on_client_connected/3,
-                   [get_log_fields('client.connected', Env)]),
-  ok = emqttd:hook('client.disconnected',
-                   fun ?MODULE:on_client_disconnected/3,
-                   [get_log_fields('client.disconnected', Env)]),
-  ok = emqttd:hook('client.subscribe',
-                   fun ?MODULE:on_client_subscribe/4,
-                   [get_log_fields('client.subscribe', Env)]),
-  ok = emqttd:hook('client.unsubscribe',
-                   fun ?MODULE:on_client_unsubscribe/4,
-                   [get_log_fields('client.unsubscribe', Env)]),
-  ok = emqttd:hook('session.created',
-                   fun ?MODULE:on_session_created/3,
-                   [get_log_fields('session.created', Env)]),
-  ok = emqttd:hook('session.terminated',
-                   fun ?MODULE:on_session_terminated/4,
-                   [get_log_fields('session.terminated', Env)]),
-  ok = emqttd:hook('session.subscribed',
-                   fun ?MODULE:on_session_subscribed/4,
-                   [get_log_fields('session.subscribed', Env)]),
-  ok = emqttd:hook('session.unsubscribed',
-                   fun ?MODULE:on_session_unsubscribed/4,
-                   [get_log_fields('session.unsubscribed', Env)]),
-  ok = emqttd:hook('message.publish',
-                   fun ?MODULE:on_message_publish/2,
-                   [get_log_fields('message.publish', Env)]),
-  ok = emqttd:hook('message.delivered',
-                   fun ?MODULE:on_message_delivered/4,
-                   [get_log_fields('message.delivered', Env)]),
-  ok = emqttd:hook('message.acked',
-                   fun ?MODULE:on_message_acked/4,
-                   [get_log_fields('message.acked', Env)]),
+  EnabledEvents = proplists:get_value(enabled_events, Env, []),
+  AllHooks = all_hooks(),
+  lists:map(fun(E)->
+                HookFun = maps:get(E, AllHooks),
+                ExtraArgs = [get_log_fields(E, Env)],
+                ok = emqttd:hook(E, HookFun, ExtraArgs)
+            end, EnabledEvents),
   ok.
 
 %%%-------------------------------------------------------------------
 %% @doc Handles hook deregistrations when unloading the plugin
 %% @end
 %%%-------------------------------------------------------------------
-unregister_hooks() ->
-  emqttd:unhook('client.connected', fun ?MODULE:on_client_connected/3),
-  emqttd:unhook('client.disconnected', fun ?MODULE:on_client_disconnected/3),
-  emqttd:unhook('client.subscribe', fun ?MODULE:on_client_subscribe/4),
-  emqttd:unhook('client.unsubscribe', fun ?MODULE:on_client_unsubscribe/4),
-  emqttd:unhook('session.created', fun ?MODULE:on_session_created/3),
-  emqttd:unhook('session.terminated', fun ?MODULE:on_session_terminated/4),
-  emqttd:unhook('session.subscribed', fun ?MODULE:on_session_subscribed/4),
-  emqttd:unhook('session.unsubscribed', fun ?MODULE:on_session_unsubscribed/4),
-  emqttd:unhook('message.publish', fun ?MODULE:on_message_publish/2),
-  emqttd:unhook('message.delivered', fun ?MODULE:on_message_delivered/4),
-  emqttd:unhook('message.acked', fun ?MODULE:on_message_acked/4).
+unregister_hooks(Env) ->
+  EnabledEvents = proplists:get_value(enabled_events, Env, []),
+  AllHooks = all_hooks(),
+  lists:map(fun(E) ->
+                HookFun = maps:get(E, AllHooks),
+                emqttd:unhook(E, HookFun)
+            end, EnabledEvents).
 
 %%%-------------------------------------------------------------------
 %% @private
