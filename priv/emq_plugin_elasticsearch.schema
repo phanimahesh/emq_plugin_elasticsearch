@@ -161,6 +161,7 @@
 %%  - sys
 %%  - msg_timestamp
 %%  - topic
+%%  - size
 %% The value `all` can be used as a shorthand for all of the above.
 %% Note that including payload will log contents of every message
 %% and can quickly overwhelm both broker and logging server under
@@ -168,7 +169,7 @@
 %% event and timestamp are always included in addition to these.
 {mapping, "elasticsearch.log_fields.message.publish", "emq_plugin_elasticsearch.log_fields",[
   {datatype, string}
- ,{default, "id,from,topic,qos,retain,msg_timestamp"}
+ ,{default, "id,from,topic,qos,retain,msg_timestamp,size"}
 ]}.
 
 %% @doc Fields/attributes to be included in logs sent to ES for 
@@ -186,6 +187,7 @@
 %%  - sys
 %%  - msg_timestamp
 %%  - topic
+%%  - size
 %% The value `all` can be used as a shorthand for all of the above.
 %% Note that including payload will log contents of every message
 %% and can quickly overwhelm both broker and logging server under
@@ -197,7 +199,7 @@
 %% @see elasticsearch.log_fields.message.publish
 {mapping, "elasticsearch.log_fields.message.delivered", "emq_plugin_elasticsearch.log_fields",[
   {datatype, string}
- ,{default, "client_id,id"}
+ ,{default, "client_id,id,size"}
 ]}.
 
 %% @doc Fields/attributes to be included in logs sent to ES for 
@@ -215,6 +217,7 @@
 %%  - sys
 %%  - msg_timestamp
 %%  - topic
+%%  - size
 %% The value `all` can be used as a shorthand for all of the above.
 %% Note that including payload will log contents of every message
 %% and can quickly overwhelm both broker and logging server under
@@ -312,6 +315,7 @@
                             ,sys
                             ,msg_timestamp
                             ,topic
+                            ,size
                            ]
      ,'message.delivered' => [
                                client_id
@@ -326,6 +330,7 @@
                               ,sys
                               ,msg_timestamp
                               ,topic
+                              ,size
                              ]
      ,'message.acked' => [
                            client_id
@@ -340,6 +345,7 @@
                           ,sys
                           ,msg_timestamp
                           ,topic
+                          ,size
                          ]
      },
     lists:foldl(

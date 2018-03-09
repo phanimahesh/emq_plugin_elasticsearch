@@ -124,6 +124,7 @@ unpack_message(Message) ->
     ,sys => Sys
     ,msg_timestamp => timestamp(ErlTimestamp)
     ,topic => Topic
+    ,size => erlang:size(Payload)
   }.
 
 
