@@ -237,8 +237,8 @@
       AllEvents = ['client.connected', 'client.disconnected',
                    'client.subscribe', 'client.unsubscribe',
                    'session.created', 'session.terminated',
-                   'session.subscribed', 'session.unsubscribed'
-                   'message.publish', 'message.delivered', 'message.acked'];
+                   'session.subscribed', 'session.unsubscribed',
+                   'message.publish', 'message.delivered', 'message.acked'],
      case cuttlefish:conf_get("elasticsearch.enabled_events", Conf) of
        "all" -> AllEvents;
        Events ->

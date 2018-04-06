@@ -16,6 +16,7 @@
         , stdlib
         , esio
         , uuid
+        , poolboy
         , jsx % FIXME: Temp
       ]}
     , {env, []}

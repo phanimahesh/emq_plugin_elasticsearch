@@ -6,6 +6,9 @@
 
 -include_lib("emqttd/include/emqttd.hrl").
 
+-export([start_link/0
+        ,init/1, terminate/2]).
+
 %% Functions to register/unregister hooks
 -export([register_hooks/1, unregister_hooks/1]).
 
@@ -15,6 +18,20 @@
          on_session_created/3, on_session_terminated/4,
          on_session_subscribed/4, on_session_unsubscribed/4,
          on_message_publish/2, on_message_delivered/4, on_message_acked/4]).
+
+
+
+start_link() -> 
+  gen_server:start_link(?MODULE, [], []).
+
+init([]) ->
+  Env = application:get_all_env(),
+  ok = register_hooks(Env),
+  {ok, []}.
+
+terminate(_Reason, _State) ->
+  Env = application:get_all_env(),
+  ok = unregister_hooks(Env).
 
 all_hooks() ->
   #{
@@ -92,7 +109,7 @@ timestamp() ->
 %% @end
 %%%-------------------------------------------------------------------
 timestamp({MegaSecs, Secs, MicroSecs}) ->
-  (MegaSecs * 100000 + Secs)*1000 + (MicroSecs div 1000).
+  (MegaSecs * 1000000 + Secs)*1000 + (MicroSecs div 1000).
 
 %%%-------------------------------------------------------------------
 %% @private
