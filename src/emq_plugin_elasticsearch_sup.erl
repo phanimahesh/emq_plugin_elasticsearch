@@ -15,7 +15,7 @@ start_link() ->
   supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
-  SupFlags = #{strategy => one_for_one, intensity => 2, period => 10},
+  SupFlags = #{strategy => rest_for_one, intensity => 2, period => 10},
   ChildSpecs = [#{id => emq_plugin_elasticsearch_logger_sup,
                   start => { emq_plugin_elasticsearch_logger_sup, start_link, []},
                   type => supervisor},
