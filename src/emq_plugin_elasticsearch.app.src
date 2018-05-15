@@ -14,10 +14,9 @@
     , {applications, [
           kernel
         , stdlib
-        , esio
-        , uuid
+        , hackney
         , poolboy
-        , jsx % FIXME: Temp
+        , jsx
       ]}
     , {env, []}
     , {mod, {emq_plugin_elasticsearch_app, []}}

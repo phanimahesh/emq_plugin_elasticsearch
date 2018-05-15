@@ -4,12 +4,14 @@
 -export([start_link/0, start_link/1
         ,init/1, terminate/2
         ,handle_info/2, handle_cast/2
+        ,format_status/2
         ]).
 
 % Public API
 -export([log/1]).
 
 -define(POOL, es_logger_pool).
+-define(APP, emq_plugin_elasticsearch).
 
 %%%-------------------------------------------------------------------
 %% @doc Logs supplied document to elasticsearch
@@ -24,46 +26,51 @@ log(Doc) ->
 %% Gen server callbacks
 %%%-------------------------------------------------------------------
 start_link() -> 
-  gen_server:start_link(?MODULE, [], []).
+  start_link([]).
 
 start_link(_Args) -> 
   gen_server:start_link(?MODULE, [], []).
 
 init([]) ->
-  {ok, State} = create_bulk_socket(),
-  {ok, State}.
+  DefUrl = <<"http://localhost:9200/mqtt/events/_bulk">>,
+  Url = application:get_env(?APP, es_url, DefUrl),
+  N = application:get_env(?APP, es_bulk_size, 1000),
+  {ok, _TRef} = timer:send_interval(60000, sync),
+  {ok, {[], Url, N}}.
 
-terminate(_Reason, {Sock, Ref}) ->
-  esio:close(Sock),
-  erlang:demonitor(Ref, [flush]).
+terminate(Reason, {Q, _Url, _N}) ->
+  io:format("PID ~p terminating for reason ~p. Queue len: ~p~n",
+            [self(), Reason, length(Q)]),
+  ok.
 
-% When the socket closes unexpectedly, re-establish connection.
-handle_info({'DOWN', Ref, process, Pid, Reason}, {_Sock, Ref}) ->
-  io:format("ES bulk socket ~w closed for reason: ~p~n", [Pid, Reason]),
-  {ok, State} = create_bulk_socket(),
-  {noreply, State};
-
-handle_info({'$pipe', _Pid, _}, State) ->
-  % esio:put_ calls return one messge each.
-  poolboy:checkin(?POOL, self()),
-  {noreply, State};
+handle_info(sync, {Q, Url, N} = State) ->
+  case length(Q) of
+    L when L == 0 -> {noreply, State};
+    _ -> send_req(Url, Q), {noreply, {[], Url, N}}
+  end;
 
 handle_info(Info, State) ->
   io:format("Unhandled info: ~p~n", [Info]),
   {noreply, State}.
 
-% handle_call({log, Doc}, _From, {Sock, _Ref} = State) ->
-handle_cast({log, Doc}, {Sock, _Ref} = State) ->
-  Id = uuid:to_string(uuid:uuid1()),
-  esio:put_(Sock, {urn, <<"events">>, Id}, Doc),
-  {noreply, State}.
+handle_cast({log, Doc}, {Q, Url, N}) ->
+  Preamble = <<"{\"index\": {}}\n">>,
+  Entry = [Preamble, jsx:encode(Doc), <<"\n">>],
+  Q1 = [Entry | Q],
+  Q2 = case length(Q1) of
+         L when L >= N -> send_req(Url, Q1), [];
+         _ -> Q1
+       end,
+  poolboy:checkin(?POOL, self()),
+  {noreply, {Q2, Url, N}}.
+
+format_status(_Opt, [_Pdict, {Q, _Url, _N}]) ->
+  [{data, [{"Queue size", length(Q)}] }].
 
 %%%-------------------------------------------------------------------
 %% Internal helpers
 %%%-------------------------------------------------------------------
-create_bulk_socket() ->
-  % Set up a bulk esio socket
-  {ok, ESUrl} = application:get_env(es_url),
-  {ok, Sock} = esio:socket(ESUrl, [bulk, {n, 2000}, {active, true}]),
-  Ref = erlang:monitor(process, Sock),
-  {ok, {Sock, Ref}}.
+send_req(Url, Q) ->
+  Headers = [{<<"Content-Type">>, <<"application/x-ndjson">>}],
+  Body = lists:reverse(Q),
+  hackney:request(post, Url, Headers, Body, [with_body]).

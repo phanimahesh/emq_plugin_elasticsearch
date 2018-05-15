@@ -150,7 +150,7 @@ unpack_message(Message) ->
 %%  Helpers to convert offending fields into acceptable formats.
 
 format_peername({Addr,Port})->
-  #{address => inet_parse:ntoa(Addr),port => Port}.
+  #{address => erlang:list_to_binary(inet:ntoa(Addr)), port => Port}.
 
 format_from({ClientId, Username})->
   #{client_id => ClientId, username => Username}.
