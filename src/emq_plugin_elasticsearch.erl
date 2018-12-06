@@ -4,7 +4,7 @@
 %%%-------------------------------------------------------------------
 -module(emq_plugin_elasticsearch).
 
--include_lib("emqttd/include/emqttd.hrl").
+-include_lib("emqx/include/emqx.hrl").
 
 -export([start_link/0
         ,init/1, terminate/2]).
@@ -13,11 +13,12 @@
 -export([register_hooks/1, unregister_hooks/1]).
 
 %% EMQ hooks callbacks
--export([on_client_connected/3, on_client_disconnected/3,
-         on_client_subscribe/4, on_client_unsubscribe/4,
-         on_session_created/3, on_session_terminated/4,
+-export([on_client_connected/4, on_client_disconnected/3,
+         on_client_subscribe/3, on_client_unsubscribe/3,
+         on_session_created/3, on_session_resumed/3, on_session_terminated/3,
          on_session_subscribed/4, on_session_unsubscribed/4,
-         on_message_publish/2, on_message_delivered/4, on_message_acked/4]).
+         on_message_publish/2, on_message_delivered/3,
+         on_message_acked/3, on_message_dropped/3]).
 
 
 
@@ -35,17 +36,19 @@ terminate(_Reason, _State) ->
 
 all_hooks() ->
   #{
-  'client.connected' => fun ?MODULE:on_client_connected/3,
+  'client.connected' => fun ?MODULE:on_client_connected/4,
   'client.disconnected' => fun ?MODULE:on_client_disconnected/3,
-  'client.subscribe' => fun ?MODULE:on_client_subscribe/4,
-  'client.unsubscribe' => fun ?MODULE:on_client_unsubscribe/4,
+  'client.subscribe' => fun ?MODULE:on_client_subscribe/3,
+  'client.unsubscribe' => fun ?MODULE:on_client_unsubscribe/3,
   'session.created' => fun ?MODULE:on_session_created/3,
-  'session.terminated' => fun ?MODULE:on_session_terminated/4,
+  'session.resumed' => fun ?MODULE:on_session_resumed/3,
+  'session.terminated' => fun ?MODULE:on_session_terminated/3,
   'session.subscribed' => fun ?MODULE:on_session_subscribed/4,
   'session.unsubscribed' => fun ?MODULE:on_session_unsubscribed/4,
   'message.publish' => fun ?MODULE:on_message_publish/2,
-  'message.delivered' => fun ?MODULE:on_message_delivered/4,
-  'message.acked' => fun ?MODULE:on_message_acked/4
+  'message.delivered' => fun ?MODULE:on_message_delivered/3,
+  'message.acked' => fun ?MODULE:on_message_acked/3,
+  'message.dropped' => fun ?MODULE:on_message_dropped/3
  }.
 
 %%%-------------------------------------------------------------------
@@ -58,7 +61,7 @@ register_hooks(Env) ->
   lists:map(fun(E)->
                 HookFun = maps:get(E, AllHooks),
                 ExtraArgs = [get_log_fields(E, Env)],
-                ok = emqttd:hook(E, HookFun, ExtraArgs)
+                ok = emqx:hook(E, HookFun, ExtraArgs)
             end, EnabledEvents),
   ok.
 
@@ -71,7 +74,7 @@ unregister_hooks(Env) ->
   AllHooks = all_hooks(),
   lists:map(fun(E) ->
                 HookFun = maps:get(E, AllHooks),
-                emqttd:unhook(E, HookFun)
+                emqx:unhook(E, HookFun)
             end, EnabledEvents).
 
 %%%-------------------------------------------------------------------
@@ -90,6 +93,15 @@ get_log_fields(Type, Env) ->
 %%%-------------------------------------------------------------------
 log_to_es(Document) ->
   emq_plugin_elasticsearch_logger:log(Document).
+
+%%%-------------------------------------------------------------------
+%% @private
+%% @doc Helper to extract value from a keyword list
+%% @end
+%%%-------------------------------------------------------------------
+kw_get(Key, KWList) ->
+  {Key, Val} = lists:keyfind(Key, 1, KWList),
+  Val.
 
 %%%-------------------------------------------------------------------
 %% @private
@@ -117,31 +129,27 @@ timestamp({MegaSecs, Secs, MicroSecs}) ->
 %% @end
 %%%-------------------------------------------------------------------
 unpack_message(Message) ->
-  #mqtt_message{
+  #message{
      id = Id
-    ,pktid = PktId
-    ,from = From
-    ,topic = Topic
     ,qos = Qos
-    % flags ignored since retain, dup, sys contain same info.
-    ,retain = Retain
-    ,dup = Dup
-    ,sys = Sys
+    ,from = From
+    ,flags = Flags
+    ,headers = Headers
+    ,topic = Topic
     ,payload = Payload
     ,timestamp = ErlTimestamp
     } = Message,
   #{
-     dup => Dup
-    ,from => format_from(From)
-    ,id => base64:encode(Id)
-    ,payload => Payload
-    ,pktid => PktId
+     id => case Id of undefined -> <<"undefined">>; Id -> base64:encode(Id) end
     ,qos => Qos
-    ,retain => Retain
-    ,sys => Sys
-    ,msg_timestamp => timestamp(ErlTimestamp)
+    ,from => From
+    ,dup => maps:get(dup, Flags)
+    ,retain => maps:get(retain, Flags)
+    ,headers => Headers
     ,topic => Topic
+    ,payload => Payload
     ,size => erlang:size(Payload)
+    ,msg_timestamp => timestamp(ErlTimestamp)
   }.
 
 
@@ -155,95 +163,70 @@ format_peername({Addr,Port})->
 format_from({ClientId, Username})->
   #{client_id => ClientId, username => Username}.
 
+format_reason(Reason) when is_integer(Reason) -> Reason;
 format_reason(Reason) when is_atom(Reason) -> Reason;
 format_reason(Reason) when is_binary(Reason) -> Reason;
 format_reason(Reason) ->
   erlang:iolist_to_binary(io_lib:format("~P", [Reason, 20])).
 
+format_credentials(Credentials) ->
+  maps:update_with(peername, fun format_peername/1, Credentials).
+
 %%& Hooks
 %%  The names should be self explanatory.
 
-on_client_connected(ConnAck, Client, Keys) ->
-  #mqtt_client{
-     clean_sess = CleanSession
-    ,client_id = ClientId
-    ,connected_at = ConnectedAt
-    ,keepalive = Keepalive
-    ,peername = Peername
-    ,proto_ver = ProtoVer
-    ,username = Username
-    ,will_topic = WillTopic
-  } = Client,
-  % TODO: Consider ws_initial_headers
-  %  Document reason for exclusion or inclusion after deciding.
-  Log = #{
+on_client_connected(_Credentials, ConnAck, ConnAttrs_, Keys) ->
+  ConnAttrs = maps:from_list(ConnAttrs_),
+  Peername = maps:get(peername, ConnAttrs),
+  ConnectedAt = maps:get(connected_at, ConnAttrs),
+  SafeAttrs = [zone, client_id, username,
+               proto_ver, proto_name,
+               is_super, is_bridge,
+               clean_start, will_topic, mountpoint],
+  ConnAttrsMap = maps:with(SafeAttrs, ConnAttrs),
+  Log = maps:merge(ConnAttrsMap, #{
      event => <<"client_connected">>
-    ,clean_sess => CleanSession
-    ,client_id => ClientId
     ,connack => ConnAck
     ,connected_at => timestamp(ConnectedAt)
-    ,keepalive => Keepalive
     ,peername => format_peername(Peername)
-    ,proto_ver => ProtoVer
     ,timestamp => timestamp()
-    ,username => Username
-    ,will_topic => WillTopic
-  },
-  log_to_es(maps:with(Keys, Log)),
-  {ok, Client}.
-
-on_client_disconnected(Reason, Client, Keys) ->
-  #mqtt_client{
-     clean_sess = CleanSession
-    ,client_id = ClientId
-    ,connected_at = ConnectedAt
-    ,keepalive = Keepalive
-    ,peername = Peername
-    ,proto_ver = ProtoVer
-    ,username = Username
-    ,will_topic = WillTopic
-  } = Client,
-  % TODO: Consider ws_initial_headers
-  %  Document reason for exclusion or inclusion after deciding.
-  Log = #{
-     event => <<"client_disconnected">>
-    ,clean_sess => CleanSession
-    ,client_id => ClientId
-    ,connected_at => timestamp(ConnectedAt)
-    ,keepalive => Keepalive
-    ,peername => format_peername(Peername)
-    ,proto_ver => ProtoVer
-    ,reason => format_reason(Reason)
-    ,timestamp => timestamp()
-    ,username => Username
-    ,will_topic => WillTopic
-  },
+  }),
   log_to_es(maps:with(Keys, Log)),
   ok.
 
-on_client_subscribe(ClientId, Username, TopicTable, Keys) ->
-  Log = #{
+on_client_disconnected(Credentials, ReasonCode, Keys) ->
+  Creds = format_credentials(Credentials),
+  Log = maps:merge(Creds, #{
+     event => <<"client_disconnected">>
+    ,reason => format_reason(ReasonCode)
+    ,timestamp => timestamp()
+  }),
+  log_to_es(maps:with(Keys, Log)),
+  ok.
+
+on_client_subscribe(Credentials, TopicFilters, Keys) ->
+  Creds = format_credentials(Credentials),
+  Log = maps:merge(Creds, #{
      event => <<"client_subscribe">>
-    ,client_id => ClientId
     ,timestamp => timestamp()
-    ,topics => TopicTable
-    ,username => Username
-   },
+    ,topics => TopicFilters
+   }),
   log_to_es(maps:with(Keys, Log)),
-  {ok, TopicTable}.
+  {ok, TopicFilters}.
 
-on_client_unsubscribe(ClientId, Username, TopicTable, Keys) ->
-  Log = #{
+on_client_unsubscribe(Credentials, TopicFilters, Keys) ->
+  Creds = format_credentials(Credentials),
+  Log = maps:merge(Creds, #{
      event => <<"client_unsubscribe">>
-    ,client_id => ClientId
     ,timestamp => timestamp()
-    ,topics => TopicTable
-    ,username => Username
-   },
+    ,topics => TopicFilters
+   }),
   log_to_es(maps:with(Keys, Log)),
-  {ok, TopicTable}.
+  {ok, TopicFilters}.
 
-on_session_created(ClientId, Username, Keys) ->
+%% XXX: Lots of stuff in sessInfo. look at emqx_session:info/1
+on_session_created(#{client_id := ClientId}, SessInfo, Keys) ->
+  Username = kw_get(username, SessInfo),
   Log = #{
      event => <<"session_created">>
     ,client_id => ClientId
@@ -252,41 +235,48 @@ on_session_created(ClientId, Username, Keys) ->
    },
   log_to_es(maps:with(Keys, Log)).
 
-on_session_subscribed(ClientId, Username, {Topic, Opts}, Keys) ->
+on_session_resumed(#{client_id := ClientId}, SessInfo, Keys) ->
+  Username = kw_get(username, SessInfo),
+  Log = #{
+     event => <<"session_resumed">>
+    ,client_id => ClientId
+    ,timestamp => timestamp()
+    ,username => Username
+   },
+  log_to_es(maps:with(Keys, Log)).
+
+on_session_subscribed(#{client_id := ClientId}, Topic, Opts, Keys) ->
   Log = #{
      event => <<"session_subscribed">>
     ,client_id => ClientId
     ,options => Opts
     ,timestamp => timestamp()
     ,topic => Topic
-    ,username => Username
    },
   log_to_es(maps:with(Keys, Log)),
-  {ok, {Topic, Opts}}.
+  ok.
 
-on_session_unsubscribed(ClientId, Username, {Topic, Opts}, Keys) ->
+on_session_unsubscribed(#{client_id := ClientId}, Topic, Opts, Keys) ->
   Log = #{
      event => <<"session_unsubscribed">>
     ,client_id => ClientId
     ,options => Opts
     ,timestamp => timestamp()
     ,topic => Topic
-    ,username => Username
    },
   log_to_es(maps:with(Keys, Log)),
   ok.
 
-on_session_terminated(ClientId, Username, Reason, Keys) ->
+on_session_terminated(#{client_id := ClientId}, ReasonCode, Keys) ->
   Log = #{
      event => <<"session_terminated">>
     ,client_id => ClientId
-    ,reason => format_reason(Reason)
+    ,reason => format_reason(ReasonCode)
     ,timestamp => timestamp()
-    ,username => Username
    },
   log_to_es(maps:with(Keys, Log)).
 
-on_message_publish(Message = #mqtt_message{topic = <<"$SYS/", _/binary>>}, _Env) ->
+on_message_publish(Message = #message{topic = <<"$SYS/", _/binary>>}, _Env) ->
   % Sys topics are deliberately ignored.
   % I don't know what crazy use case will require it,
   % but I'm currently assuming it doesn't exist unless shown otherwise.
@@ -302,23 +292,37 @@ on_message_publish(Message, Keys) ->
   log_to_es(maps:with(Keys, Log)),
   {ok, Message}.
 
-on_message_delivered(ClientId, Username, Message, Keys) ->
+on_message_delivered(#{client_id := ClientId}, Message, Keys) ->
   Log = maps:merge(unpack_message(Message), #{
      event => <<"message_delivered">>
     ,client_id => ClientId
     ,timestamp => timestamp()
-    ,username => Username
    }),
   log_to_es(maps:with(Keys, Log)),
   {ok, Message}.
 
-on_message_acked(ClientId, Username, Message, Keys) ->
+on_message_acked(#{client_id := ClientId}, Message, Keys) ->
   Log = maps:merge(unpack_message(Message), #{
      event => <<"message_acked">>
     ,client_id => ClientId
     ,timestamp => timestamp()
-    ,username => Username
    }),
   log_to_es(maps:with(Keys, Log)),
   {ok, Message}.
 
+on_message_dropped(_By, #message{topic = <<"$SYS/", _/binary>>}, _Keys) ->
+    ok;
+on_message_dropped(#{node := Node}, Message, Keys) ->
+  Log = maps:merge(unpack_message(Message), #{
+     event => <<"message_dropped">>
+    ,timestamp => timestamp()
+    ,node => Node
+   }),
+  log_to_es(maps:with(Keys, Log));
+on_message_dropped(#{client_id := ClientId}, Message, Keys) ->
+  Log = maps:merge(unpack_message(Message), #{
+     event => <<"message_dropped">>
+    ,timestamp => timestamp()
+    ,client_id => ClientId
+   }),
+  log_to_es(maps:with(Keys, Log)).
