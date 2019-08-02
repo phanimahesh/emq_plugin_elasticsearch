@@ -14,15 +14,13 @@
 
 %% EMQ hooks callbacks
 -export([on_client_connected/4, on_client_disconnected/3,
-         on_client_subscribe/3, on_client_unsubscribe/3,
-         on_session_created/3, on_session_resumed/3, on_session_terminated/3,
-         on_session_subscribed/4, on_session_unsubscribed/4,
-         on_message_publish/2, on_message_delivered/3,
-         on_message_acked/3, on_message_dropped/3]).
+         on_client_subscribe/3, on_client_unsubscribe/3
+%         on_session_created/3, on_session_terminated/4,
+%         on_session_subscribed/4, on_session_unsubscribed/4,
+%         on_message_publish/2, on_message_delivered/3, on_message_acked/3
+        ]).
 
-
-
-start_link() -> 
+start_link() ->
   gen_server:start_link(?MODULE, [], []).
 
 init([]) ->
@@ -39,16 +37,16 @@ all_hooks() ->
   'client.connected' => fun ?MODULE:on_client_connected/4,
   'client.disconnected' => fun ?MODULE:on_client_disconnected/3,
   'client.subscribe' => fun ?MODULE:on_client_subscribe/3,
-  'client.unsubscribe' => fun ?MODULE:on_client_unsubscribe/3,
-  'session.created' => fun ?MODULE:on_session_created/3,
-  'session.resumed' => fun ?MODULE:on_session_resumed/3,
-  'session.terminated' => fun ?MODULE:on_session_terminated/3,
-  'session.subscribed' => fun ?MODULE:on_session_subscribed/4,
-  'session.unsubscribed' => fun ?MODULE:on_session_unsubscribed/4,
-  'message.publish' => fun ?MODULE:on_message_publish/2,
-  'message.delivered' => fun ?MODULE:on_message_delivered/3,
-  'message.acked' => fun ?MODULE:on_message_acked/3,
-  'message.dropped' => fun ?MODULE:on_message_dropped/3
+  'client.unsubscribe' => fun ?MODULE:on_client_unsubscribe/3
+  % 'session.created' => fun ?MODULE:on_session_created/3,
+  % 'session.resumed' => fun ?MODULE:on_session_resumed/3,
+  % 'session.terminated' => fun ?MODULE:on_session_terminated/3,
+  % 'session.subscribed' => fun ?MODULE:on_session_subscribed/4,
+  % 'session.unsubscribed' => fun ?MODULE:on_session_unsubscribed/4,
+  % 'message.publish' => fun ?MODULE:on_message_publish/2,
+  % 'message.deliver' => fun ?MODULE:on_message_deliver/3,
+  % 'message.acked' => fun ?MODULE:on_message_acked/3
+  % 'message.dropped' => fun ?MODULE:on_message_dropped/3
  }.
 
 %%%-------------------------------------------------------------------
@@ -56,8 +54,9 @@ all_hooks() ->
 %% @end
 %%%-------------------------------------------------------------------
 register_hooks(Env) ->
-  EnabledEvents = proplists:get_value(enabled_events, Env, []),
   AllHooks = all_hooks(),
+  % EnabledEvents = proplists:get_value(enabled_events, Env, []),
+  EnabledEvents = maps:keys(AllHooks),
   lists:map(fun(E)->
                 HookFun = maps:get(E, AllHooks),
                 ExtraArgs = [get_log_fields(E, Env)],
@@ -69,9 +68,10 @@ register_hooks(Env) ->
 %% @doc Handles hook deregistrations when unloading the plugin
 %% @end
 %%%-------------------------------------------------------------------
-unregister_hooks(Env) ->
-  EnabledEvents = proplists:get_value(enabled_events, Env, []),
+unregister_hooks(_Env) ->
   AllHooks = all_hooks(),
+  % EnabledEvents = proplists:get_value(enabled_events, Env, []),
+  EnabledEvents = maps:keys(AllHooks),
   lists:map(fun(E) ->
                 HookFun = maps:get(E, AllHooks),
                 emqx:unhook(E, HookFun)
@@ -175,14 +175,27 @@ format_credentials(Credentials) ->
 %%& Hooks
 %%  The names should be self explanatory.
 
-on_client_connected(_Credentials, ConnAck, ConnAttrs_, Keys) ->
-  ConnAttrs = maps:from_list(ConnAttrs_),
+  %%  Structure of ConnAttrs:
+  %%     #{ zone => Zone
+  %%      , client_id => ClientId
+  %%      , username => Username
+  %%      , peername => Peername
+  %%      , peercert => Peercert
+  %%      , proto_ver => ProtoVer
+  %%      , proto_name => ProtoName
+  %%      , clean_start => CleanStart
+  %%      , keepalive => Keepalive
+  %%      , is_bridge => IsBridge
+  %%      , connected_at => ConnectedAt
+  %%      , conn_mod => ConnMod
+  %%      , credentials => Credentials
+  %%      }
+
+on_client_connected(_Credentials, ConnAck, ConnAttrs, Keys) ->
   Peername = maps:get(peername, ConnAttrs),
   ConnectedAt = maps:get(connected_at, ConnAttrs),
   SafeAttrs = [zone, client_id, username,
-               proto_ver, proto_name,
-               is_super, is_bridge,
-               clean_start, will_topic, mountpoint],
+               proto_ver, proto_name],
   ConnAttrsMap = maps:with(SafeAttrs, ConnAttrs),
   Log = maps:merge(ConnAttrsMap, #{
      event => <<"client_connected">>
